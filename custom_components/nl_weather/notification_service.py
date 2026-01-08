@@ -68,18 +68,27 @@ class NotificationService:
 
     async def handle_message(self, message):
         event = json.loads(message.payload)
-        dataset = event["data"]["datasetName"]
         _LOGGER.debug(f"MQTT event: {event}")
 
-        if self._callbacks[dataset] is not None:
-            try:
-                await asyncio.gather(
-                    *[c(event) for c in self._callbacks[dataset].values()]
-                )
-            except Exception as e:
-                _LOGGER.error(
-                    f"Error handling notification message for {dataset}: {str(e)}"
-                )
+        data = event.get("data")
+        if not isinstance(data, dict):
+            _LOGGER.debug("Ignoring MQTT event without data payload")
+            return
+
+        dataset = data.get("datasetName")
+        if not dataset:
+            _LOGGER.debug("Ignoring MQTT event without datasetName")
+            return
+
+        callbacks = self._callbacks.get(dataset)
+        if not callbacks:
+            _LOGGER.debug("Ignoring MQTT dataset %s", dataset)
+            return
+
+        try:
+            await asyncio.gather(*[c(event) for c in callbacks.values()])
+        except Exception as e:
+            _LOGGER.error(f"Error handling notification message for {dataset}: {str(e)}")
 
     async def disconnect(self):
         _LOGGER.debug("Disconnected")
