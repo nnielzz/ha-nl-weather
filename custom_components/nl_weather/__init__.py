@@ -44,7 +44,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: KNMIDirectConfigEntry) -
 
     session = async_get_clientsession(hass)
     ns = NotificationService(entry.data[CONF_MQTT_TOKEN])
-    entry.async_create_background_task(hass, ns.run(), "NotificationService")
+    ns._task = entry.async_create_background_task(
+        hass, ns.run(), "NotificationService"
+    )
 
     entry.runtime_data = RuntimeData(
         notification_service=ns,
@@ -81,4 +83,6 @@ async def _async_update_listener(
 
 async def async_unload_entry(hass: HomeAssistant, entry: KNMIDirectConfigEntry) -> bool:
     """Unload a config entry."""
+    notification_service = entry.runtime_data.notification_service
+    await notification_service.disconnect()
     return await hass.config_entries.async_unload_platforms(entry, _PLATFORMS)
