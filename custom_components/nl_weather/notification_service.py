@@ -20,12 +20,13 @@ TOPICS = [
 
 
 class NotificationService:
-    _task: asyncio.Task
+    _task: asyncio.Task | None
     _callback = None
 
     def __init__(self, token: str):
         self._tls_context = get_default_context()
         self._token = token
+        self._task = None
         self._callbacks = {
             "10-minute-in-situ-meteorological-observations": {},
             "radar_forecast": {},
@@ -92,7 +93,8 @@ class NotificationService:
 
     async def disconnect(self):
         _LOGGER.debug("Disconnected")
-        self._task.cancel()
+        if self._task is not None:
+            self._task.cancel()
 
     async def test_connection(self):
         try:
