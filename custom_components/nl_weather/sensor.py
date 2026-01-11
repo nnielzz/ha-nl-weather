@@ -41,6 +41,45 @@ async def async_setup_entry(
 # TODO: Clean up sensor creation using a base class
 
 
+_ALERT_PRIORITY = {
+    Alert.NONE: 0,
+    Alert.YELLOW: 1,
+    Alert.ORANGE: 2,
+    Alert.RED: 3,
+}
+
+
+def _alert_level_from_payload(alert: dict) -> Alert:
+    for key in ("alertLevel", "level", "alert_level", "color"):
+        if key not in alert:
+            continue
+        level = alert[key]
+        if isinstance(level, str):
+            normalized = level.lower()
+            if normalized == "green":
+                return Alert.NONE
+            try:
+                return Alert(normalized)
+            except ValueError:
+                continue
+        if isinstance(level, int):
+            return {
+                0: Alert.NONE,
+                1: Alert.YELLOW,
+                2: Alert.ORANGE,
+                3: Alert.RED,
+            }.get(level, Alert.NONE)
+    return Alert.NONE
+
+
+def _highest_alert(alerts: list[dict]) -> dict | None:
+    if not alerts:
+        return None
+    return max(
+        alerts, key=lambda alert: _ALERT_PRIORITY[_alert_level_from_payload(alert)]
+    )
+
+
 class NLWeatherAlertSensor(CoordinatorEntity[NLWeatherUpdateCoordinator], SensorEntity):
     def __init__(
         self, coordinator, config_entry: KNMIDirectConfigEntry, subentry: ConfigSubentry
@@ -60,10 +99,10 @@ class NLWeatherAlertSensor(CoordinatorEntity[NLWeatherUpdateCoordinator], Sensor
 
     @property
     def native_value(self):
-        # TODO: Not dealing well with multiple alerts yet
-        if len(self.coordinator.data["alerts"]) == 0:
+        alert = _highest_alert(self.coordinator.data["alerts"])
+        if alert is None:
             return "none"
-        return self.coordinator.data["alerts"][0]["description"]
+        return alert.get("description", "none")
 
 
 class NLWeatherAlertLevelSensor(
@@ -91,7 +130,10 @@ class NLWeatherAlertLevelSensor(
 
     @property
     def native_value(self):
-        return Alert(self.coordinator.data["hourly"]["forecast"][0]["alertLevel"])
+        alert = _highest_alert(self.coordinator.data["alerts"])
+        if alert is None:
+            return Alert.NONE
+        return _alert_level_from_payload(alert)
 
 
 class NLObservationStationDistanceSensor(
